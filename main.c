@@ -14,7 +14,7 @@ uint8_t menu_selection = 0;
 /* Yapılandırma Veri Yapısı */
 typedef struct {
     uint8_t difficulty;       // 0: Easy, 1: Medium, 2: Hard
-    uint8_t character_type;   // 0: Lizard, 1: Snake
+    uint8_t character_type;   // 0: Lizard ('L'), 1: Snake ('S')
     uint8_t maze_render_mode; // 0: GFX (Çizim), 1: TEXT (# / .)
     uint8_t char_render_mode; // 0: GFX (Çizim), 1: TEXT (L / S)
     uint8_t timer_mode;       // 0: Timeless, 1: Timed
@@ -63,7 +63,7 @@ uint16_t next_rand(void) {
     return lcg_seed;
 }
 
-/* Renk Paleti Havuzu */
+/* Renk Paleti Havuzu (Sharp Twin Famicom RGB/Composite Uyumlu) */
 typedef struct {
     uint8_t wall;
     uint8_t path;
@@ -82,7 +82,7 @@ const PaletteConfig PALETTE_POOL[] = {
 uint8_t active_pal = 0;
 uint8_t last_pal = 0xFF;
 
-/* SRAM ve Kartuş Yöneticisi */
+/* SRAM ve Kartuş Yöneticisi ($6000 - $7FFF) */
 void save_settings(void) {
     volatile uint8_t* sram_magic = (volatile uint8_t*)0x6000;
     volatile uint8_t* sram_data = (volatile uint8_t*)0x6001;
@@ -108,7 +108,7 @@ void load_settings(void) {
     }
 }
 
-/* cc65 PPU Temizleme ve Yazma Yardımı */
+/* PPU Temizleme ve Yazma Yardımcıları */
 void ppu_clear_screen(void) {
     uint16_t i;
     PPU.addr = 0x20;
@@ -158,7 +158,7 @@ void apply_palette(void) {
     }
 }
 
-/* cc65 Standart Kontrolcü Okuma */
+/* Kontrolcü Okuma (Twin Famicom Standard Pad 1) */
 uint8_t read_controller(void) {
     uint8_t res = 0;
     uint8_t i;
@@ -171,7 +171,7 @@ uint8_t read_controller(void) {
     return res;
 }
 
-/* Çözülebilir Rastgele Labirent (Randomized DFS) */
+/* %100 Çözülebilir Rastgele Labirent (Randomized DFS - Recursive Backtracking) */
 void generate_maze_world(void) {
     int16_t r, c, i;
     
@@ -230,7 +230,9 @@ void generate_maze_world(void) {
                     }
                 }
             }
-            if (!found_unvisited) top--;
+            if (!found_unvisited) {
+                top--;
+            }
         }
     }
 
@@ -245,7 +247,7 @@ void generate_maze_world(void) {
     }
 }
 
-/* Ekranı Çiz ve Merkezle */
+/* Oyun Ekranı Çizimi ve Merkezleme */
 void render_game_screen(void) {
     uint8_t r, c;
     uint16_t start_addr = 0x2080 + ((32 - maze_w) / 2);
@@ -256,7 +258,7 @@ void render_game_screen(void) {
     apply_palette();
     ppu_clear_screen();
     
-    ppu_write_str(0x2022, "KGAMER OPENNES MAZE");
+    ppu_write_str(0x2022, "TWIN FAMICOM MAZE");
     
     for (r = 0; r < maze_h; r++) {
         for (c = 0; c < maze_w; c++) {
@@ -283,13 +285,13 @@ void render_game_screen(void) {
     PPU.mask = 0x1E;
 }
 
-/* Ana Menü */
+/* Ana Menü Ekranı */
 void render_main_menu(void) {
     PPU.ctrl = 0;
     PPU.mask = 0;
     ppu_clear_screen();
     
-    ppu_write_str(0x2044, "== KGAMER OPENNES MAZE ==");
+    ppu_write_str(0x2042, "== TWIN FAMICOM MAZE ==");
     ppu_write_str(0x2086, menu_selection == 0 ? "> START GAME"    : "  START GAME");
     ppu_write_str(0x20A6, menu_selection == 1 ? "> DIFFICULTY: " : "  DIFFICULTY: ");
     ppu_write_str(0x20E6, menu_selection == 2 ? "> CHARACTER: "  : "  CHARACTER: ");
