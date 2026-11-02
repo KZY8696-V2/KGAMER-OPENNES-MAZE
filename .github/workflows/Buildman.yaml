@@ -1,0 +1,91 @@
+name: Build KGAMER OpenNES Maze
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git
+
+      - name: Clone and Build cc65 from Source
+        run: |
+          git clone https://github.com/cc65/cc65.git
+          cd cc65
+          make -j$(nproc)
+          echo "$(pwd)/bin" >> $GITHUB_PATH
+
+      - name: Verify cc65 Installation
+        run: |
+          cc65 --version
+
+      # --- 1. Standard NES Target ---
+      - name: Build Standard NES ROM
+        continue-on-error: true
+        run: |
+          cc65 -O -t nes main_nes.c -o main_nes.s
+          ca65 main_nes.s -o main_nes.o
+          ld65 -t nes main_nes.o -o kgamer_open_nes_maze_nes.nes
+
+      - name: Upload NES Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kgamer_nes_rom
+          path: kgamer_open_nes_maze_nes.nes
+          if-no-files-found: ignore
+
+      # --- 2. Standard Famicom Target ---
+      - name: Build Standard Famicom ROM
+        continue-on-error: true
+        run: |
+          cc65 -O -t nes main_famicom.c -o main_fc.s
+          ca65 main_fc.s -o main_fc.o
+          ld65 -t nes main_fc.o -o kgamer_open_nes_maze_famicom.nes
+
+      - name: Upload Famicom Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kgamer_famicom_rom
+          path: kgamer_open_nes_maze_famicom.nes
+          if-no-files-found: ignore
+
+      # --- 3. Famicom Disk System Target ---
+      - name: Build FDS Disk Image
+        continue-on-error: true
+        run: |
+          cc65 -O -t fds main_fds.c -o main_fds.s
+          ca65 main_fds.s -o main_fds.o
+          ld65 -t fds main_fds.o -o kgamer_open_nes_maze_fds.fds
+
+      - name: Upload FDS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kgamer_fds_disk
+          path: kgamer_open_nes_maze_fds.fds
+          if-no-files-found: ignore
+
+      # --- 4. Sharp Twin Famicom Target ---
+      - name: Build Sharp Twin Famicom ROM
+        continue-on-error: true
+        run: |
+          cc65 -O -t nes main-fdstwin.c -o main_twin.s
+          ca65 main_twin.s -o main_twin.o
+          ld65 -t nes main_twin.o -o kgamer_open_nes_maze_twin.nes
+
+      - name: Upload Twin Famicom Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kgamer_twin_famicom_rom
+          path: kgamer_open_nes_maze_twin.nes
+          if-no-files-found: ignore
