@@ -2,6 +2,10 @@
 #include <stdint.h>
 #include <string.h>
 
+/* PPU Register Güvenli Tanımları */
+#define PPU_CTRL   (*(volatile uint8_t*)0x2000)
+#define PPU_MASK   (*(volatile uint8_t*)0x2001)
+
 /* Oyun Durumları (State Machine) */
 #define STATE_MAIN_MENU  0
 #define STATE_PLAYING    1
@@ -55,6 +59,10 @@ char maze[MAX_MAZE_H][MAX_MAZE_W];
 
 uint8_t p_x = 1, p_y = 1;
 uint8_t e_x = 19, e_y = 17;
+
+/* Stack Taşmasını Önlemek İçin Diziler Global Statik Yapıldı */
+static uint8_t stack_x[256];
+static uint8_t stack_y[256];
 
 /* LCG Rastgele Üreteç */
 static uint16_t lcg_seed = 1986;
@@ -193,7 +201,6 @@ void generate_maze_world(void) {
     maze[p_y][p_x] = '.';
 
     {
-        uint8_t stack_x[256], stack_y[256];
         int16_t top = 0;
         
         stack_x[top] = p_x;
@@ -252,8 +259,8 @@ void render_game_screen(void) {
     uint8_t r, c;
     uint16_t start_addr = 0x2080 + ((32 - maze_w) / 2);
     
-    PPU.ctrl = 0;
-    PPU.mask = 0;
+    PPU_CTRL = 0;
+    PPU_MASK = 0;
     
     apply_palette();
     ppu_clear_screen();
@@ -281,14 +288,14 @@ void render_game_screen(void) {
         }
     }
     
-    PPU.ctrl = 0x90;
-    PPU.mask = 0x1E;
+    PPU_CTRL = 0x90;
+    PPU_MASK = 0x1E;
 }
 
 /* Ana Menü Ekranı */
 void render_main_menu(void) {
-    PPU.ctrl = 0;
-    PPU.mask = 0;
+    PPU_CTRL = 0;
+    PPU_MASK = 0;
     ppu_clear_screen();
     
     ppu_write_str(0x2042, "== KGAMER STANDARD NES ==");
@@ -308,8 +315,8 @@ void render_main_menu(void) {
     ppu_write_str(0x21AA, current_settings.no_color_mode ? "B&W" : "COL");
     ppu_write_str(0x21EA, current_settings.save_target == 0 ? "SRAM" : "IN-CART");
     
-    PPU.ctrl = 0x90;
-    PPU.mask = 0x1E;
+    PPU_CTRL = 0x90;
+    PPU_MASK = 0x1E;
 }
 
 /* cc65 Giriş Noktası (main) */
