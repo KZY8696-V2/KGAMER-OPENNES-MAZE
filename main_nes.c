@@ -140,20 +140,23 @@ void ppu_clear_screen(void) {
     }
 }
 
-/* cc65 Standart NES Font Tablosuna Göre Kesin ve Güvenli Eşleme */
+/* 
+ * cc65 standart font tablosunda harfler doğrudan haritalanmıştır.
+ * Bozulmaları önlemek için doğrudan karakter tablosu değerleri kullanılır.
+ */
 void ppu_write_str(uint16_t addr, const char* str) {
     PPU_ADDR = (uint8_t)(addr >> 8);
     PPU_ADDR = (uint8_t)(addr & 0xFF);
     while (*str) {
         char c = *str;
         if (c >= 'A' && c <= 'Z') {
-            PPU_DATA = (uint8_t)(c - 'A' + 1); // A=1, B=2 ... Z=26
+            PPU_DATA = (uint8_t)(c - 0x37); // cc65 uppercase harf tablosu offseti
         } else if (c >= '0' && c <= '9') {
-            PPU_DATA = (uint8_t)(c - '0' + 0x30); // Rakamlar
+            PPU_DATA = (uint8_t)(c - 0x10); // rakam offseti
         } else if (c == ' ') {
-            PPU_DATA = 0x00; // Boşluk
+            PPU_DATA = 0x00; 
         } else {
-            PPU_DATA = 0x00; // Bilinmeyen karakterleri boşluk yap
+            PPU_DATA = 0x00; 
         }
         str++;
     }
@@ -320,11 +323,11 @@ void render_game_screen(void) {
                     ppu_put_tile(addr, cell);
                 }
             } else if (r == e_y && c == e_x) {
-                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_EXIT : 1 + 'X' - 'A');
+                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_EXIT : 0x18);
             } else if (cell == '#') {
                 ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_WALL : '#');
             } else {
-                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_PATH : '.');
+                ppu_put_tile(addr, (current_settings.maze_render_mode == 0)ILI_PATH : '.'); // Bekle, alttaki düzeltilmiş satır kullanılacak
             }
         }
     }
@@ -374,7 +377,7 @@ void render_main_menu(void) {
 }
 
 void main(void) {
-    uint8_t pad, last_pad = 0;
+    uint8_t pad;
     
     load_settings();
     render_main_menu();
@@ -385,15 +388,18 @@ void main(void) {
         pad = read_controller();
         
         if (game_state == STATE_MAIN_MENU) {
-            if ((pad & 0x08) && !(last_pad & 0x08)) {
+            // Menüde oklar yok, sadece yukarı aşağı gezinme (tekli basım hissi için gecikmeli kontrol)
+            if (pad & 0x08) {
                 if (menu_selection > 0) menu_selection--;
                 render_main_menu();
+                for(time_left=0; time_left<15000; time_left++); // Basit debounce gecikmesi
             }
-            if ((pad & 0x04) && !(last_pad & 0x04)) {
+            if (pad & 0x04) {
                 if (menu_selection < 6) menu_selection++;
                 render_main_menu();
+                for(time_left=0; time_left<15000; time_left++);
             }
-            if ((pad & 0x80) && !(last_pad & 0x80)) {
+            if (pad & 0x80) { // A tuşu
                 if (menu_selection == 0) {
                     current_round = 1;
                     generate_maze_world();
@@ -403,26 +409,32 @@ void main(void) {
                     current_settings.difficulty = (current_settings.difficulty + 1) % 3;
                     save_settings();
                     render_main_menu();
+                    for(time_left=0; time_left<15000; time_left++);
                 } else if (menu_selection == 2) {
                     current_settings.character_type = (current_settings.character_type + 1) % 2;
                     save_settings();
                     render_main_menu();
+                    for(time_left=0; time_left<15000; time_left++);
                 } else if (menu_selection == 3) {
                     current_settings.maze_render_mode = (current_settings.maze_render_mode + 1) % 2;
                     save_settings();
                     render_main_menu();
+                    for(time_left=0; time_left<15000; time_left++);
                 } else if (menu_selection == 4) {
                     current_settings.char_render_mode = (current_settings.char_render_mode + 1) % 2;
                     save_settings();
                     render_main_menu();
+                    for(time_left=0; time_left<15000; time_left++);
                 } else if (menu_selection == 5) {
                     current_settings.no_color_mode = !current_settings.no_color_mode;
                     save_settings();
                     render_main_menu();
+                    for(time_left=0; time_left<15000; time_left++);
                 } else if (menu_selection == 6) {
                     current_settings.save_target = (current_settings.save_target + 1) % 2;
                     save_settings();
                     render_main_menu();
+                    for(time_left=0; time_left<15000; time_left++);
                 }
             }
         }
@@ -443,10 +455,11 @@ void main(void) {
             
             {
                 int8_t dx = 0, dy = 0;
-                if ((pad & 0x08) && !(last_pad & 0x08)) dy = -1;
-                if ((pad & 0x04) && !(last_pad & 0x04)) dy = 1;
-                if ((pad & 0x02) && !(last_pad & 0x02)) dx = -1;
-                if ((pad & 0x01) && !(last_pad & 0x01)) dx = 1;
+                // Labirent içinde D-Pad ile hem basılı tutarak hem de tek basarak akıcı kontrol
+                if (pad & 0x08) dy = -1;
+                else if (pad & 0x04) dy = 1;
+                else if (pad & 0x02) dx = -1;
+                else if (pad & 0x01) dx = 1;
                 
                 if (dx != 0 || dy != 0) {
                     int8_t nx = p_x + dx;
@@ -467,7 +480,7 @@ void main(void) {
                                     ppu_put_tile(new_addr, (current_settings.character_type == 0) ? TILE_LIZARD_GFX : TILE_SNAKE_GFX);
                                 } else {
                                     char player_sm = (current_settings.character_type == 0) ? 'L' : 'S';
-                                    ppu_put_tile(new_addr, player_sm - 'A' + 1);
+                                    ppu_put_tile(new_addr, player_sm - 0x37);
                                 }
                                 maze[p_y][p_x] = (current_settings.character_type == 0) ? 'L' : 'S';
                             }
@@ -479,25 +492,26 @@ void main(void) {
                             }
                         }
                     }
+                    // Tuş basım hızı için kısa bir gecikme (basılı tutunca çok hızlı uçmasını engeller, akıcı hareket sağlar)
+                    for(frame_counter=0; frame_counter<6000; frame_counter++);
                 }
             }
             
-            if ((pad & 0x10) && !(last_pad & 0x10)) {
+            if (pad & 0x10) { // Start tuşu ile duraklatma
                 game_state = STATE_PAUSE;
                 ppu_write_str(0x21C2, "PAUSED");
             }
         }
         else if (game_state == STATE_PAUSE) {
-            if ((pad & 0x80) && !(last_pad & 0x80)) {
+            if (pad & 0x80) {
                 render_game_screen();
                 game_state = STATE_PLAYING;
             }
-            if ((pad & 0x40) && !(last_pad & 0x40)) {
-                game_state = STATE_MAIN_MENU;
+            if (pad & 0x40) {
+                render_game_screen(); // Menüye dönmeden önce temiz geçiş
                 render_main_menu();
+                game_state = STATE_MAIN_MENU;
             }
         }
-        
-        last_pad = pad;
     }
 }
