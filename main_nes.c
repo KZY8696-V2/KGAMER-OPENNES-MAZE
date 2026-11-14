@@ -79,18 +79,15 @@ char maze[MAX_MAZE_H][MAX_MAZE_W];
 uint8_t p_x = 1, p_y = 1;
 uint8_t e_x = 19, e_y = 17;
 
-/* Stack Taşmasını Önlemek İçin Diziler Global Statik Yapıldı */
 static uint8_t stack_x[256];
 static uint8_t stack_y[256];
 
-/* LCG Rastgele Üreteç */
 static uint16_t lcg_seed = 1986;
 uint16_t next_rand(void) {
     lcg_seed = (lcg_seed * 25173UL + 13849UL + current_round) % 65535UL;
     return lcg_seed;
 }
 
-/* Renk Paleti Havuzu (Standard NES NTSC Uyumlu) */
 typedef struct {
     uint8_t wall;
     uint8_t path;
@@ -109,7 +106,6 @@ const PaletteConfig PALETTE_POOL[] = {
 uint8_t active_pal = 0;
 uint8_t last_pal = 0xFF;
 
-/* SRAM ve Kartuş Yöneticisi ($6000 - $7FFF) */
 void save_settings(void) {
     volatile uint8_t* sram_magic = (volatile uint8_t*)0x6000;
     volatile uint8_t* sram_data = (volatile uint8_t*)0x6001;
@@ -135,7 +131,6 @@ void load_settings(void) {
     }
 }
 
-/* PPU Temizleme ve Yazma Yardımcıları */
 void ppu_clear_screen(void) {
     uint16_t i;
     PPU_ADDR = 0x20;
@@ -145,7 +140,25 @@ void ppu_clear_screen(void) {
     }
 }
 
-/* Sayısal Değerleri Metne Çevirip Yazdırma Yardımcısı */
+/* cc65 Standart NES Font Tablosuna Göre Kesin ve Güvenli Eşleme */
+void ppu_write_str(uint16_t addr, const char* str) {
+    PPU_ADDR = (uint8_t)(addr >> 8);
+    PPU_ADDR = (uint8_t)(addr & 0xFF);
+    while (*str) {
+        char c = *str;
+        if (c >= 'A' && c <= 'Z') {
+            PPU_DATA = (uint8_t)(c - 'A' + 1); // A=1, B=2 ... Z=26
+        } else if (c >= '0' && c <= '9') {
+            PPU_DATA = (uint8_t)(c - '0' + 0x30); // Rakamlar
+        } else if (c == ' ') {
+            PPU_DATA = 0x00; // Boşluk
+        } else {
+            PPU_DATA = 0x00; // Bilinmeyen karakterleri boşluk yap
+        }
+        str++;
+    }
+}
+
 void ppu_write_number(uint16_t addr, uint16_t num) {
     char buf[6];
     int i = 4;
@@ -158,27 +171,6 @@ void ppu_write_number(uint16_t addr, uint16_t num) {
         buf[i--] = ' ';
     }
     ppu_write_str(addr, &buf[i + 1]);
-}
-
-/* Güvenli ve Bozulmaz Karakter Dönüşüm Tablosu */
-void ppu_write_str(uint16_t addr, const char* str) {
-    PPU_ADDR = (uint8_t)(addr >> 8);
-    PPU_ADDR = (uint8_t)(addr & 0xFF);
-    while (*str) {
-        char c = *str;
-        if (c >= 'A' && c <= 'Z') {
-            PPU_DATA = c - 0x40; 
-        } else if (c >= '0' && c <= '9') {
-            PPU_DATA = c - 0x10; 
-        } else if (c == ' ') {
-            PPU_DATA = 0x00;     
-        } else if (c == 'X') {
-            PPU_DATA = 'X' - 0x40; 
-        } else {
-            PPU_DATA = 0x00; // Bozulma olmaması için tanımsız karakterler boşluk yapılır
-        }
-        str++;
-    }
 }
 
 void ppu_put_tile(uint16_t addr, uint8_t tile) {
@@ -212,7 +204,6 @@ void apply_palette(void) {
     }
 }
 
-/* Standart NES Kontrolcü Okuma (Joypad 1) */
 uint8_t read_controller(void) {
     uint8_t res = 0;
     uint8_t i;
@@ -225,7 +216,6 @@ uint8_t read_controller(void) {
     return res;
 }
 
-/* %100 Çözülebilir Rastgele Labirent ve Süre Ayarı */
 void generate_maze_world(void) {
     int16_t r, c, i;
     
@@ -253,7 +243,6 @@ void generate_maze_world(void) {
 
     {
         int16_t top = 0;
-        
         stack_x[top] = p_x;
         stack_y[top] = p_y;
 
@@ -305,7 +294,6 @@ void generate_maze_world(void) {
     }
 }
 
-/* Oyun Ekranı Çizimi */
 void render_game_screen(void) {
     uint8_t r, c;
     uint16_t start_addr = 0x2080 + ((32 - maze_w) / 2);
@@ -317,9 +305,7 @@ void render_game_screen(void) {
     ppu_clear_screen(); 
     
     ppu_write_str(0x2026, "KGAMER NES MAZE");
-    
-    /* Sağ üst köşede raunt göstergesi */
-    ppu_write_str(0x202C, "RD:");
+    ppu_write_str(0x202C, "RD");
     ppu_write_number(0x202F, current_round);
 
     for (r = 0; r < maze_h; r++) {
@@ -334,7 +320,7 @@ void render_game_screen(void) {
                     ppu_put_tile(addr, cell);
                 }
             } else if (r == e_y && c == e_x) {
-                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_EXIT : ('X' - 0x40));
+                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_EXIT : 1 + 'X' - 'A');
             } else if (cell == '#') {
                 ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_WALL : '#');
             } else {
@@ -343,9 +329,8 @@ void render_game_screen(void) {
         }
     }
     
-    /* Altta Süreli Mod HUD Alanı */
     if (current_settings.timer_mode == 1) {
-        ppu_write_str(0x2389, "TIME:");
+        ppu_write_str(0x2389, "TIME");
         ppu_write_number(0x238F, time_left);
     } else {
         ppu_write_str(0x2389, "TIMELESS");
@@ -361,7 +346,6 @@ void update_hud_timer(void) {
     }
 }
 
-/* Ana Menü Ekranı - Tamamen Ortalanmış ve Bozulmaz */
 void render_main_menu(void) {
     PPU_CTRL = 0;
     PPU_MASK = 0;
@@ -378,8 +362,8 @@ void render_main_menu(void) {
     ppu_write_str(0x21E8, "SAVE TARGET");
     ppu_write_str(0x2227, "DPAD NAV A SELECT");
     
-    ppu_write_str(0x20A9, current_settings.difficulty == 0 ? "EASY" : (current_settings.difficulty == 1 ? "MED " : "HARD"));
-    ppu_write_str(0x20E9, current_settings.character_type == 0 ? "LIZARD" : "SNAKE ");
+    ppu_write_str(0x20A9, current_settings.difficulty == 0 ? "EASY" : (current_settings.difficulty == 1 ? "MED" : "HARD"));
+    ppu_write_str(0x20E9, current_settings.character_type == 0 ? "LIZARD" : "SNAKE");
     ppu_write_str(0x2129, current_settings.maze_render_mode == 0 ? "GFX" : "TEXT");
     ppu_write_str(0x2169, current_settings.char_render_mode == 0 ? "GFX" : "TEXT");
     ppu_write_str(0x21A9, current_settings.no_color_mode ? "BNW" : "COL");
@@ -389,7 +373,6 @@ void render_main_menu(void) {
     PPU_MASK = 0x1E;
 }
 
-/* cc65 Giriş Noktası (main) */
 void main(void) {
     uint8_t pad, last_pad = 0;
     
@@ -397,7 +380,7 @@ void main(void) {
     render_main_menu();
     
     while (1) {
-        while (!(PPU_STATUS & 0x80)); // VBlank Bekle
+        while (!(PPU_STATUS & 0x80));
         
         pad = read_controller();
         
@@ -453,7 +436,7 @@ void main(void) {
                         update_hud_timer();
                     } else {
                         game_state = STATE_GAMEOVER;
-                        ppu_write_str(0x224A, "TIME UP  GAME OVER");
+                        ppu_write_str(0x224A, "GAME OVER");
                     }
                 }
             }
@@ -483,8 +466,8 @@ void main(void) {
                                 if (current_settings.char_render_mode == 0) {
                                     ppu_put_tile(new_addr, (current_settings.character_type == 0) ? TILE_LIZARD_GFX : TILE_SNAKE_GFX);
                                 } else {
-                                    char player_sym = (current_settings.character_type == 0) ? 'L' : 'S';
-                                    ppu_put_tile(new_addr, player_sym);
+                                    char player_sm = (current_settings.character_type == 0) ? 'L' : 'S';
+                                    ppu_put_tile(new_addr, player_sm - 'A' + 1);
                                 }
                                 maze[p_y][p_x] = (current_settings.character_type == 0) ? 'L' : 'S';
                             }
@@ -501,7 +484,7 @@ void main(void) {
             
             if ((pad & 0x10) && !(last_pad & 0x10)) {
                 game_state = STATE_PAUSE;
-                ppu_write_str(0x21C2, "PAUSED A RES B MAIN");
+                ppu_write_str(0x21C2, "PAUSED");
             }
         }
         else if (game_state == STATE_PAUSE) {
