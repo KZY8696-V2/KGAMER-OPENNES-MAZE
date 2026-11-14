@@ -15,23 +15,24 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download and Setup cc65 Prebuilt Snapshot
+        shell: pwsh
         run: |
-          # Doğrudan ve kararlı SourceForge mirror linki kullanılıyor
           curl.exe -L -o cc65.zip "https://downloads.sourceforge.net/project/cc65/cc65-snapshot-win64.zip"
           Expand-Archive -Path "cc65.zip" -DestinationPath "."
           
-          # Çıkan klasörün tam bin yolunu buluyoruz
+          # cc65 klasörünün içindeki bin dizininin tam yolunu buluyoruz
           $cc65Bin = (Get-ChildItem -Directory -Filter "cc65*").FullName + "\bin"
           
-          # Hem bu adım içindeki oturuma hem de GitHub ortamına kalıcı olarak ekliyoruz
-          $env:PATH += ";$cc65Bin"
-          echo "$cc65Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # GitHub PATH'ine UTF-8 formatında güvenle ekliyoruz (sorun burada çözülüyor)
+          Add-Content -Path $env:GITHUB_PATH -Value "$cc65Bin" -Encoding utf8
 
       - name: Verify cc65 Installation
+        shell: pwsh
         run: |
           cl65 --version
 
       - name: Build Standard NES ROM
+        shell: pwsh
         run: |
           cl65 -O -t nes main_nes.c -o kgamer_open_nes_maze_nes.nes
 
