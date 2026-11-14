@@ -16,7 +16,8 @@ jobs:
 
       - name: Download and Setup cc65 Prebuilt Snapshot
         run: |
-          curl.exe -L -o cc65.zip "https://sourceforge.net/projects/cc65/files/cc65-snapshot-win64.zip/download"
+          # Doğrudan ve kararlı SourceForge mirror linki kullanılıyor
+          curl.exe -L -o cc65.zip "https://downloads.sourceforge.net/project/cc65/cc65-snapshot-win64.zip"
           Expand-Archive -Path "cc65.zip" -DestinationPath "."
           
           # Çıkan klasörün tam bin yolunu buluyoruz
