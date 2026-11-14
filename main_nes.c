@@ -140,19 +140,15 @@ void ppu_clear_screen(void) {
     }
 }
 
-/* 
- * cc65 standart font tablosunda harfler doğrudan haritalanmıştır.
- * Bozulmaları önlemek için doğrudan karakter tablosu değerleri kullanılır.
- */
 void ppu_write_str(uint16_t addr, const char* str) {
     PPU_ADDR = (uint8_t)(addr >> 8);
     PPU_ADDR = (uint8_t)(addr & 0xFF);
     while (*str) {
         char c = *str;
         if (c >= 'A' && c <= 'Z') {
-            PPU_DATA = (uint8_t)(c - 0x37); // cc65 uppercase harf tablosu offseti
+            PPU_DATA = (uint8_t)(c - 0x37); 
         } else if (c >= '0' && c <= '9') {
-            PPU_DATA = (uint8_t)(c - 0x10); // rakam offseti
+            PPU_DATA = (uint8_t)(c - 0x10); 
         } else if (c == ' ') {
             PPU_DATA = 0x00; 
         } else {
@@ -327,7 +323,7 @@ void render_game_screen(void) {
             } else if (cell == '#') {
                 ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_WALL : '#');
             } else {
-                ppu_put_tile(addr, (current_settings.maze_render_mode == 0)ILI_PATH : '.'); // Bekle, alttaki düzeltilmiş satır kullanılacak
+                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_PATH : '.');
             }
         }
     }
@@ -388,18 +384,17 @@ void main(void) {
         pad = read_controller();
         
         if (game_state == STATE_MAIN_MENU) {
-            // Menüde oklar yok, sadece yukarı aşağı gezinme (tekli basım hissi için gecikmeli kontrol)
             if (pad & 0x08) {
                 if (menu_selection > 0) menu_selection--;
                 render_main_menu();
-                for(time_left=0; time_left<15000; time_left++); // Basit debounce gecikmesi
+                for(time_left=0; time_left<15000; time_left++);
             }
             if (pad & 0x04) {
                 if (menu_selection < 6) menu_selection++;
                 render_main_menu();
                 for(time_left=0; time_left<15000; time_left++);
             }
-            if (pad & 0x80) { // A tuşu
+            if (pad & 0x80) {
                 if (menu_selection == 0) {
                     current_round = 1;
                     generate_maze_world();
@@ -455,7 +450,6 @@ void main(void) {
             
             {
                 int8_t dx = 0, dy = 0;
-                // Labirent içinde D-Pad ile hem basılı tutarak hem de tek basarak akıcı kontrol
                 if (pad & 0x08) dy = -1;
                 else if (pad & 0x04) dy = 1;
                 else if (pad & 0x02) dx = -1;
@@ -492,12 +486,11 @@ void main(void) {
                             }
                         }
                     }
-                    // Tuş basım hızı için kısa bir gecikme (basılı tutunca çok hızlı uçmasını engeller, akıcı hareket sağlar)
                     for(frame_counter=0; frame_counter<6000; frame_counter++);
                 }
             }
             
-            if (pad & 0x10) { // Start tuşu ile duraklatma
+            if (pad & 0x10) {
                 game_state = STATE_PAUSE;
                 ppu_write_str(0x21C2, "PAUSED");
             }
@@ -508,7 +501,7 @@ void main(void) {
                 game_state = STATE_PLAYING;
             }
             if (pad & 0x40) {
-                render_game_screen(); // Menüye dönmeden önce temiz geçiş
+                render_game_screen();
                 render_main_menu();
                 game_state = STATE_MAIN_MENU;
             }
