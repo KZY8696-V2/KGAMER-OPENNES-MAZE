@@ -9,6 +9,21 @@
 #define PPU_DATA   (*(volatile uint8_t*)0x2007)
 #define JOYPAD1    (*(volatile uint8_t*)0x4016)
 
+/* --- FONKSİYON PROTOTİPLERİ (C Derleyicisinin Sıralama Hatasını Önler) --- */
+void ppu_clear_screen(void);
+void ppu_write_str(uint16_t addr, const char* str);
+void ppu_write_number(uint16_t addr, uint16_t num);
+void ppu_put_tile(uint16_t addr, uint8_t tile);
+void apply_palette(void);
+uint8_t read_controller(void);
+void generate_maze_world(void);
+void render_game_screen(void);
+void update_hud_timer(void);
+void render_main_menu(void);
+void save_settings(void);
+void load_settings(void);
+uint16_t next_rand(void);
+
 /* Oyun Durumları (State Machine) */
 #define STATE_MAIN_MENU  0
 #define STATE_PLAYING    1
@@ -304,7 +319,7 @@ void generate_maze_world(void) {
     }
 }
 
-/* Oyun Ekranı Çizimi (Oklar Yok, Raunt ve Süre HUD'u Aktif) */
+/* Oyun Ekranı Çizimi */
 void render_game_screen(void) {
     uint8_t r, c;
     uint16_t start_addr = 0x2080 + ((32 - maze_w) / 2);
@@ -360,7 +375,7 @@ void update_hud_timer(void) {
     }
 }
 
-/* Ana Menü Ekranı (Oklar Tamamen Kaldırıldı) */
+/* Ana Menü Ekranı */
 void render_main_menu(void) {
     PPU_CTRL = 0;
     PPU_MASK = 0;
