@@ -14,17 +14,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Download cc65 Prebuilt Snapshot
+      - name: Download and Setup cc65 Prebuilt Snapshot
         run: |
-          # curl.exe ile -L parametresi kullanılarak SourceForge yönlendirmeleri takip edilir
           curl.exe -L -o cc65.zip "https://sourceforge.net/projects/cc65/files/cc65-snapshot-win64.zip/download"
-          
-          # Arşivi çıkartıyoruz
           Expand-Archive -Path "cc65.zip" -DestinationPath "."
           
-          # Çıkan klasör adını bulup bin dizinini PATH'e ekliyoruz
-          $cc65Dir = (Get-ChildItem -Directory -Filter "cc65*").FullName
-          echo "$cc65Dir\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Çıkan klasörün tam bin yolunu buluyoruz
+          $cc65Bin = (Get-ChildItem -Directory -Filter "cc65*").FullName + "\bin"
+          
+          # Hem bu adım içindeki oturuma hem de GitHub ortamına kalıcı olarak ekliyoruz
+          $env:PATH += ";$cc65Bin"
+          echo "$cc65Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Verify cc65 Installation
         run: |
