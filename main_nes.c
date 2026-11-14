@@ -1,10 +1,13 @@
-#include <nes.h>
 #include <stdint.h>
 #include <string.h>
 
-/* PPU Register Güvenli Tanımları */
+/* Doğrudan Donanım Register Tanımları (cc65 ile tam uyumlu) */
 #define PPU_CTRL   (*(volatile uint8_t*)0x2000)
 #define PPU_MASK   (*(volatile uint8_t*)0x2001)
+#define PPU_STATUS (*(volatile uint8_t*)0x2002)
+#define PPU_ADDR   (*(volatile uint8_t*)0x2006)
+#define PPU_DATA   (*(volatile uint8_t*)0x2007)
+#define JOYPAD1    (*(volatile uint8_t*)0x4016)
 
 /* Oyun Durumları (State Machine) */
 #define STATE_MAIN_MENU  0
@@ -119,38 +122,38 @@ void load_settings(void) {
 /* PPU Temizleme ve Yazma Yardımcıları */
 void ppu_clear_screen(void) {
     uint16_t i;
-    PPU.addr = 0x20;
-    PPU.addr = 0x00;
+    PPU_ADDR = 0x20;
+    PPU_ADDR = 0x00;
     for (i = 0; i < 1024; i++) {
-        PPU.data = 0x00;
+        PPU_DATA = 0x00;
     }
 }
 
 void ppu_write_str(uint16_t addr, const char* str) {
-    PPU.addr = (uint8_t)(addr >> 8);
-    PPU.addr = (uint8_t)(addr & 0xFF);
+    PPU_ADDR = (uint8_t)(addr >> 8);
+    PPU_ADDR = (uint8_t)(addr & 0xFF);
     while (*str) {
-        PPU.data = *str - 0x20;
+        PPU_DATA = *str - 0x20;
         str++;
     }
 }
 
 void ppu_put_tile(uint16_t addr, uint8_t tile) {
-    PPU.addr = (uint8_t)(addr >> 8);
-    PPU.addr = (uint8_t)(addr & 0xFF);
-    PPU.data = tile;
+    PPU_ADDR = (uint8_t)(addr >> 8);
+    PPU_ADDR = (uint8_t)(addr & 0xFF);
+    PPU_DATA = tile;
 }
 
 void apply_palette(void) {
     uint8_t new_pal;
-    PPU.addr = 0x3F;
-    PPU.addr = 0x00;
+    PPU_ADDR = 0x3F;
+    PPU_ADDR = 0x00;
     
     if (current_settings.no_color_mode) {
-        PPU.data = 0x0F;
-        PPU.data = 0x30;
-        PPU.data = 0x10;
-        PPU.data = 0x20;
+        PPU_DATA = 0x0F;
+        PPU_DATA = 0x30;
+        PPU_DATA = 0x10;
+        PPU_DATA = 0x20;
     } else {
         do {
             new_pal = (uint8_t)(next_rand() % POOL_SIZE);
@@ -159,10 +162,10 @@ void apply_palette(void) {
         active_pal = new_pal;
         last_pal = active_pal;
         
-        PPU.data = 0x0F;
-        PPU.data = PALETTE_POOL[active_pal].wall;
-        PPU.data = PALETTE_POOL[active_pal].path;
-        PPU.data = PALETTE_POOL[active_pal].accent;
+        PPU_DATA = 0x0F;
+        PPU_DATA = PALETTE_POOL[active_pal].wall;
+        PPU_DATA = PALETTE_POOL[active_pal].path;
+        PPU_DATA = PALETTE_POOL[active_pal].accent;
     }
 }
 
@@ -327,7 +330,7 @@ void main(void) {
     render_main_menu();
     
     while (1) {
-        while (!(PPU.status & 0x80)); // VBlank Bekle
+        while (!(PPU_STATUS & 0x80)); // VBlank Bekle
         
         pad = read_controller();
         
