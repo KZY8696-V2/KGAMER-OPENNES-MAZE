@@ -16,8 +16,10 @@ jobs:
 
       - name: Download cc65 Prebuilt Snapshot
         run: |
-          # Resmi güncel cc65 Windows 64-bit paketini doğrudan indiriyoruz
-          Invoke-WebRequest -Uri "https://sourceforge.net/projects/cc65/files/cc65-snapshot-win64.zip/download" -OutFile "cc65.zip"
+          # curl.exe ile -L parametresi kullanılarak SourceForge yönlendirmeleri takip edilir
+          curl.exe -L -o cc65.zip "https://sourceforge.net/projects/cc65/files/cc65-snapshot-win64.zip/download"
+          
+          # Arşivi çıkartıyoruz
           Expand-Archive -Path "cc65.zip" -DestinationPath "."
           
           # Çıkan klasör adını bulup bin dizinini PATH'e ekliyoruz
