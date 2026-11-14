@@ -1,30 +1,11 @@
 #include <stdint.h>
 #include <string.h>
+#include <conio.h>
 
-/* Doğrudan Donanım Register Tanımları (cc65 ile tam uyumlu) */
-#define PPU_CTRL   (*(volatile uint8_t*)0x2000)
-#define PPU_MASK   (*(volatile uint8_t*)0x2001)
-#define PPU_STATUS (*(volatile uint8_t*)0x2002)
-#define PPU_ADDR   (*(volatile uint8_t*)0x2006)
-#define PPU_DATA   (*(volatile uint8_t*)0x2007)
+/* Doğrudan Donanım Register Tanımları */
 #define JOYPAD1    (*(volatile uint8_t*)0x4016)
 
-/* --- FONKSİYON PROTOTİPLERİ --- */
-void ppu_clear_screen(void);
-void ppu_write_str(uint16_t addr, const char* str);
-void ppu_write_number(uint16_t addr, uint16_t num);
-void ppu_put_tile(uint16_t addr, uint8_t tile);
-void apply_palette(void);
-uint8_t read_controller(void);
-void generate_maze_world(void);
-void render_game_screen(void);
-void update_hud_timer(void);
-void render_main_menu(void);
-void save_settings(void);
-void load_settings(void);
-uint16_t next_rand(void);
-
-/* Oyun Durumları (State Machine) */
+/* Oyun Durumları */
 #define STATE_MAIN_MENU  0
 #define STATE_PLAYING    1
 #define STATE_PAUSE      2
@@ -33,22 +14,16 @@ uint16_t next_rand(void);
 uint8_t game_state = STATE_MAIN_MENU;
 uint8_t menu_selection = 0;
 
-/* Yapılandırma Veri Yapısı */
 typedef struct {
-    uint8_t difficulty;       // 0: Easy, 1: Medium, 2: Hard
-    uint8_t character_type;   // 0: Lizard ('L'), 1: Snake ('S')
-    uint8_t timer_mode;       // 0: Timeless, 1: Timed
-    uint8_t no_color_mode;    // 0: Color, 1: B&W
-    uint8_t save_target;      // 0: SRAM, 1: In-Cartridge ROM / NVRAM
+    uint8_t difficulty;       
+    uint8_t character_type;   
+    uint8_t timer_mode;       
+    uint8_t no_color_mode;    
+    uint8_t save_target;      
 } GameSettings;
 
-/* Kartuş İçi / ROM Varsayılan Ayarları */
 const GameSettings IN_CART_DEFAULTS = {
-    1, // Medium Difficulty
-    0, // Lizard
-    1, // Timed Mode
-    0, // Color
-    1  // In-Cartridge Storage
+    1, 0, 1, 0, 1
 };
 
 GameSettings current_settings;
@@ -58,7 +33,6 @@ uint16_t max_time = 60;
 uint16_t frame_counter = 0;
 uint8_t current_round = 1;
 
-/* Labirent Boyutları */
 #define MAX_MAZE_W 31
 #define MAX_MAZE_H 25
 uint8_t maze_w = 21;
@@ -76,24 +50,6 @@ uint16_t next_rand(void) {
     lcg_seed = (lcg_seed * 25173UL + 13849UL + current_round) % 65535UL;
     return lcg_seed;
 }
-
-typedef struct {
-    uint8_t wall;
-    uint8_t path;
-    uint8_t accent;
-} PaletteConfig;
-
-const PaletteConfig PALETTE_POOL[] = {
-    {0x16, 0x30, 0x27},
-    {0x12, 0x30, 0x21},
-    {0x1A, 0x30, 0x28},
-    {0x14, 0x30, 0x34},
-    {0x27, 0x30, 0x18}
-};
-#define POOL_SIZE 5
-
-uint8_t active_pal = 0;
-uint8_t last_pal = 0xFF;
 
 void save_settings(void) {
     volatile uint8_t* sram_magic = (volatile uint8_t*)0x6000;
@@ -117,85 +73,6 @@ void load_settings(void) {
         memcpy(&current_settings, (void*)sram_data, sizeof(GameSettings));
     } else {
         memcpy(&current_settings, &IN_CART_DEFAULTS, sizeof(GameSettings));
-    }
-}
-
-void ppu_clear_screen(void) {
-    uint16_t i;
-    PPU_ADDR = 0x20;
-    PPU_ADDR = 0x00;
-    for (i = 0; i < 1024; i++) {
-        PPU_DATA = 0x00;
-    }
-}
-
-/* Saf ASCII Karakter Dönüştürücü (Bozulmaları %100 Engeller) */
-void ppu_write_str(uint16_t addr, const char* str) {
-    PPU_ADDR = (uint8_t)(addr >> 8);
-    PPU_ADDR = (uint8_t)(addr & 0xFF);
-    while (*str) {
-        char c = *str;
-        if (c >= 'A' && c <= 'Z') {
-            PPU_DATA = (uint8_t)(c - 0x37); 
-        } else if (c >= '0' && c <= '9') {
-            PPU_DATA = (uint8_t)(c - 0x10); 
-        } else if (c == '.') {
-            PPU_DATA = 0x2E; // Nokta karakteri
-        } else if (c == '#') {
-            PPU_DATA = 0x23; // Kare karakteri
-        } else if (c == 'X') {
-            PPU_DATA = 'X' - 0x37; // Çıkış harfi
-        } else if (c == ' ') {
-            PPU_DATA = 0x00; 
-        } else {
-            PPU_DATA = 0x00; 
-        }
-        str++;
-    }
-}
-
-void ppu_write_number(uint16_t addr, uint16_t num) {
-    char buf[6];
-    int i = 4;
-    buf[5] = '\0';
-    do {
-        buf[i--] = (char)('0' + (num % 10));
-        num /= 10;
-    } while (num > 0 && i >= 0);
-    while (i >= 0) {
-        buf[i--] = ' ';
-    }
-    ppu_write_str(addr, &buf[i + 1]);
-}
-
-void ppu_put_tile(uint16_t addr, uint8_t tile) {
-    PPU_ADDR = (uint8_t)(addr >> 8);
-    PPU_ADDR = (uint8_t)(addr & 0xFF);
-    PPU_DATA = tile;
-}
-
-void apply_palette(void) {
-    uint8_t new_pal;
-    PPU_ADDR = 0x3F;
-    PPU_ADDR = 0x00;
-    
-    if (current_settings.no_color_mode) {
-        PPU_DATA = 0x0F;
-        PPU_DATA = 0x30;
-        PPU_DATA = 0x10;
-        PPU_DATA = 0x20;
-    } else {
-        do {
-            new_pal = (uint8_t)(next_rand() % POOL_SIZE);
-        } while (new_pal == last_pal);
-        
-        active_pal = new_pal;
-        last_pal = active_pal;
-        
-        PPU_DATA = 0x0F;
-        PPU_DATA = PALETTE_POOL[active_pal].wall;
-        PPU_DATA = PALETTE_POOL[active_pal].path;
-        PPU_DATA = PALETTE_POOL[active_pal].accent;
     }
 }
 
@@ -289,78 +166,57 @@ void generate_maze_world(void) {
     }
 }
 
+void render_main_menu(void) {
+    clrscr();
+    
+    gotoxy(8, 2);  cputs("KGAMER NES MAZE");
+    
+    gotoxy(10, 6);  cputs("START GAME");
+    gotoxy(10, 8);  cputs("DIFFICULTY");
+    gotoxy(10, 10); cputs("CHARACTER");
+    gotoxy(10, 12); cputs("TIMER MODE");
+    gotoxy(10, 14); cputs("COLOR MODE");
+    gotoxy(10, 16); cputs("SAVE TARGET");
+    gotoxy(7,  22); cputs("DPAD NAV A SELECT");
+    
+    gotoxy(22, 8);  cputs(current_settings.difficulty == 0 ? "EASY" : (current_settings.difficulty == 1 ? "MED " : "HARD"));
+    gotoxy(22, 10); cputs(current_settings.character_type == 0 ? "LIZARD" : "SNAKE ");
+    gotoxy(22, 12); cputs(current_settings.timer_mode == 0 ? "OFF" : "ON ");
+    gotoxy(22, 14); cputs(current_settings.no_color_mode ? "BNW" : "COL");
+    gotoxy(22, 16); cputs(current_settings.save_target == 0 ? "SRAM" : "INCART");
+}
+
 void render_game_screen(void) {
     uint8_t r, c;
-    uint16_t start_addr = 0x2080 + ((32 - maze_w) / 2);
+    uint8_t offset_x = (32 - maze_w) / 2;
+    uint8_t offset_y = 4;
     
-    PPU_CTRL = 0;
-    PPU_MASK = 0;
+    clrscr();
     
-    apply_palette();
-    ppu_clear_screen(); 
-    
-    ppu_write_str(0x2026, "KGAMER NES MAZE");
-    ppu_write_str(0x202C, "RD");
-    ppu_write_number(0x202F, current_round);
+    gotoxy(8, 1); cputs("KGAMER NES MAZE");
+    gotoxy(2, 2); cputs("RD:");
+    gotoxy(6, 2); cprintf("%u", current_round);
 
     for (r = 0; r < maze_h; r++) {
         for (c = 0; c < maze_w; c++) {
-            uint16_t addr = start_addr + (r * 32) + c;
-            char cell = maze[r][c];
-            
-            if (r == p_y && c == p_x) {
-                char player_sm = (current_settings.character_type == 0) ? 'L' : 'S';
-                ppu_put_tile(addr, player_sm - 0x37);
-            } else if (r == e_y && c == e_x) {
-                ppu_put_tile(addr, 'X' - 0x37);
-            } else if (cell == '#') {
-                ppu_put_tile(addr, 0x23); // '#'
-            } else {
-                ppu_put_tile(addr, 0x2E); // '.'
-            }
+            gotoxy(offset_x + c, offset_y + r);
+            cputc(maze[r][c]);
         }
     }
     
     if (current_settings.timer_mode == 1) {
-        ppu_write_str(0x2389, "TIME");
-        ppu_write_number(0x238F, time_left);
+        gotoxy(2, 23); cputs("TIME:");
+        gotoxy(8, 23); cprintf("%u  ", time_left);
     } else {
-        ppu_write_str(0x2389, "TIMELESS");
+        gotoxy(2, 23); cputs("TIMELESS");
     }
-
-    PPU_CTRL = 0x90;
-    PPU_MASK = 0x1E;
 }
 
 void update_hud_timer(void) {
     if (current_settings.timer_mode == 1) {
-        ppu_write_number(0x238F, time_left);
+        gotoxy(8, 23);
+        cprintf("%u  ", time_left);
     }
-}
-
-void render_main_menu(void) {
-    PPU_CTRL = 0;
-    PPU_MASK = 0;
-    ppu_clear_screen();
-    
-    ppu_write_str(0x2048, "KGAMER NES MAZE");
-    
-    ppu_write_str(0x2088, "START GAME");
-    ppu_write_str(0x20A8, "DIFFICULTY");
-    ppu_write_str(0x20E8, "CHARACTER");
-    ppu_write_str(0x2128, "TIMER MODE");
-    ppu_write_str(0x2168, "COLOR MODE");
-    ppu_write_str(0x21A8, "SAVE TARGET");
-    ppu_write_str(0x2227, "DPAD NAV A SELECT");
-    
-    ppu_write_str(0x20A9, current_settings.difficulty == 0 ? "EASY" : (current_settings.difficulty == 1 ? "MED" : "HARD"));
-    ppu_write_str(0x20E9, current_settings.character_type == 0 ? "LIZARD" : "SNAKE");
-    ppu_write_str(0x2129, current_settings.timer_mode == 0 ? "OFF" : "ON ");
-    ppu_write_str(0x2169, current_settings.no_color_mode ? "BNW" : "COL");
-    ppu_write_str(0x21A9, current_settings.save_target == 0 ? "SRAM" : "INCART");
-    
-    PPU_CTRL = 0x90;
-    PPU_MASK = 0x1E;
 }
 
 void main(void) {
@@ -370,8 +226,6 @@ void main(void) {
     render_main_menu();
     
     while (1) {
-        while (!(PPU_STATUS & 0x80));
-        
         pad = read_controller();
         
         if (game_state == STATE_MAIN_MENU) {
@@ -429,7 +283,8 @@ void main(void) {
                         update_hud_timer();
                     } else {
                         game_state = STATE_GAMEOVER;
-                        ppu_write_str(0x224A, "GAME OVER");
+                        gotoxy(11, 23);
+                        cputs("GAME OVER");
                     }
                 }
             }
@@ -444,20 +299,21 @@ void main(void) {
                 if (dx != 0 || dy != 0) {
                     int8_t nx = p_x + dx;
                     int8_t ny = p_y + dy;
-                    uint16_t start_addr = 0x2080 + ((32 - maze_w) / 2);
+                    uint8_t offset_x = (32 - maze_w) / 2;
+                    uint8_t offset_y = 4;
                     
                     if (nx >= 0 && nx < maze_w && ny >= 0 && ny < maze_h) {
                         if (maze[ny][nx] != '#') {
-                            uint16_t old_addr = start_addr + (p_y * 32) + p_x;
-                            ppu_put_tile(old_addr, 0x2E); // '.'
+                            gotoxy(offset_x + p_x, offset_y + p_y);
+                            cputc('.');
                             maze[p_y][p_x] = '.';
                             
                             p_x = nx; p_y = ny;
                             
                             {
-                                uint16_t new_addr = start_addr + (p_y * 32) + p_x;
                                 char player_sm = (current_settings.character_type == 0) ? 'L' : 'S';
-                                ppu_put_tile(new_addr, player_sm - 0x37);
+                                gotoxy(offset_x + p_x, offset_y + p_y);
+                                cputc(player_sm);
                                 maze[p_y][p_x] = player_sm;
                             }
                             
@@ -468,13 +324,14 @@ void main(void) {
                             }
                         }
                     }
-                    for(frame_counter=0; frame_counter<6000; frame_counter++);
+                    for(frame_counter=0; frame_counter<4000; frame_counter++);
                 }
             }
             
             if (pad & 0x10) {
                 game_state = STATE_PAUSE;
-                ppu_write_str(0x21C2, "PAUSED");
+                gotoxy(12, 23);
+                cputs("PAUSED");
             }
         }
         else if (game_state == STATE_PAUSE) {
@@ -483,7 +340,6 @@ void main(void) {
                 game_state = STATE_PLAYING;
             }
             if (pad & 0x40) {
-                render_game_screen();
                 render_main_menu();
                 game_state = STATE_MAIN_MENU;
             }
