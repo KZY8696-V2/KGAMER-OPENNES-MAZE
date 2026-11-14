@@ -3,36 +3,49 @@
 #include <conio.h>
 
 /* Doğrudan Donanım Register Tanımları */
+#define PPU_STATUS (*(volatile uint8_t*)0x2002)
 #define JOYPAD1    (*(volatile uint8_t*)0x4016)
 
-/* Oyun Durumları */
+/* Oyun Durumları (State Machine) */
 #define STATE_MAIN_MENU  0
-#define STATE_PLAYING    1
-#define STATE_PAUSE      2
-#define STATE_GAMEOVER   3
+#define STATE_CHAR_MENU  1
+#define STATE_PLAYING    2
+#define STATE_PAUSE      3
+#define STATE_GAMEOVER   4
 
 uint8_t game_state = STATE_MAIN_MENU;
 uint8_t menu_selection = 0;
+uint8_t char_menu_selection = 0;
 
+/* Yapılandırma Veri Yapısı */
 typedef struct {
-    uint8_t difficulty;       
-    uint8_t character_type;   
-    uint8_t timer_mode;       
-    uint8_t no_color_mode;    
-    uint8_t save_target;      
+    uint8_t difficulty;       // 0: Easy, 1: Medium, 2: Hard, 3: Custom
+    uint8_t character_type;   // 0: Lizard ('L'), 1: Snake ('S')
+    uint8_t timer_mode;       // 0: Timeless (Off), 1: Timed (On)
+    uint16_t custom_time;     // Özel Seçilen Süre (Örn: 30, 60, 90...)
+    uint8_t custom_size;      // Özel Labirent Boyutu (0: Small, 1: Medium, 2: Large)
+    uint8_t no_color_mode;    // 0: Color, 1: B&W
+    uint8_t save_target;      // 0: SRAM, 1: In-Cartridge ROM / NVRAM
 } GameSettings;
 
 const GameSettings IN_CART_DEFAULTS = {
-    1, 0, 1, 0, 1
+    1,   // Medium Difficulty
+    0,   // Lizard ('L')
+    1,   // Timed Mode ON
+    60,  // 60 Seconds Default
+    1,   // Medium Size
+    0,   // Color ON
+    1    // In-Cartridge Storage
 };
 
 GameSettings current_settings;
 
 uint16_t time_left = 60;
 uint16_t max_time = 60;
-uint16_t frame_counter = 0;
+uint8_t frame_counter = 0;
 uint8_t current_round = 1;
 
+/* Labirent Boyutları */
 #define MAX_MAZE_W 31
 #define MAX_MAZE_H 25
 uint8_t maze_w = 21;
@@ -91,15 +104,19 @@ uint8_t read_controller(void) {
 void generate_maze_world(void) {
     int16_t r, c, i;
     
-    if (current_settings.difficulty == 0) {       
+    /* Labirent Boyutu ve Süre Belirleme */
+    if (current_settings.custom_size == 0) {       
         maze_w = 15; maze_h = 13; 
-        max_time = 45;
-    } else if (current_settings.difficulty == 1) { 
+    } else if (current_settings.custom_size == 1) { 
         maze_w = 21; maze_h = 19; 
-        max_time = 75;
     } else {                                      
         maze_w = 29; maze_h = 25; 
-        max_time = 120;
+    }
+
+    if (current_settings.timer_mode == 0) {
+        max_time = 0;
+    } else {
+        max_time = current_settings.custom_time;
     }
 
     time_left = max_time;
@@ -168,22 +185,38 @@ void generate_maze_world(void) {
 
 void render_main_menu(void) {
     clrscr();
-    
     gotoxy(8, 2);  cputs("KGAMER NES MAZE");
-    
-    gotoxy(10, 6);  cputs("START GAME");
-    gotoxy(10, 8);  cputs("DIFFICULTY");
-    gotoxy(10, 10); cputs("CHARACTER");
-    gotoxy(10, 12); cputs("TIMER MODE");
-    gotoxy(10, 14); cputs("COLOR MODE");
-    gotoxy(10, 16); cputs("SAVE TARGET");
+    gotoxy(10, 5);  cputs("START GAME");
+    gotoxy(10, 7);  cputs("MAZE SIZE");
+    gotoxy(10, 9);  cputs("TIMER MODE");
+    gotoxy(10, 11); cputs("CUSTOM TIME");
+    gotoxy(10, 13); cputs("CHARACTER SETTINGS");
+    gotoxy(10, 15); cputs("COLOR MODE");
+    gotoxy(10, 17); cputs("SAVE TARGET");
     gotoxy(7,  22); cputs("DPAD NAV A SELECT");
     
-    gotoxy(22, 8);  cputs(current_settings.difficulty == 0 ? "EASY" : (current_settings.difficulty == 1 ? "MED " : "HARD"));
-    gotoxy(22, 10); cputs(current_settings.character_type == 0 ? "LIZARD" : "SNAKE ");
-    gotoxy(22, 12); cputs(current_settings.timer_mode == 0 ? "OFF" : "ON ");
-    gotoxy(22, 14); cputs(current_settings.no_color_mode ? "BNW" : "COL");
-    gotoxy(22, 16); cputs(current_settings.save_target == 0 ? "SRAM" : "INCART");
+    gotoxy(22, 7);  cputs(current_settings.custom_size == 0 ? "SMALL" : (current_settings.custom_size == 1 ? "MED  " : "LARGE"));
+    gotoxy(22, 9);  cputs(current_settings.timer_mode == 0 ? "OFF" : "ON ");
+    
+    gotoxy(22, 11); 
+    if(current_settings.timer_mode == 0) {
+        cputs("N/A ");
+    } else {
+        cprintf("%uS  ", current_settings.custom_time);
+    }
+    
+    gotoxy(22, 13); cputs("->");
+    gotoxy(22, 15); cputs(current_settings.no_color_mode ? "BNW" : "COL");
+    gotoxy(22, 17); cputs(current_settings.save_target == 0 ? "SRAM" : "INCART");
+}
+
+void render_char_menu(void) {
+    clrscr();
+    gotoxy(8, 3);  cputs("CHARACTER CONFIG");
+    gotoxy(10, 8);  cputs("PLAYER TYPE");
+    gotoxy(10, 12); cputs("BACK TO MAIN MENU");
+    gotoxy(7,  22); cputs("DPAD NAV A SELECT");
+    gotoxy(23, 8);  cputs(current_settings.character_type == 0 ? "LIZARD" : "SNAKE ");
 }
 
 void render_game_screen(void) {
@@ -192,7 +225,6 @@ void render_game_screen(void) {
     uint8_t offset_y = 4;
     
     clrscr();
-    
     gotoxy(8, 1); cputs("KGAMER NES MAZE");
     gotoxy(2, 2); cputs("RD:");
     gotoxy(6, 2); cprintf("%u", current_round);
@@ -220,56 +252,78 @@ void update_hud_timer(void) {
 }
 
 void main(void) {
-    uint8_t pad;
+    uint8_t pad, last_pad = 0;
     
     load_settings();
     render_main_menu();
     
     while (1) {
+        while (!(PPU_STATUS & 0x80)); // VBlank Bekle (60Hz)
+        
         pad = read_controller();
         
         if (game_state == STATE_MAIN_MENU) {
-            if (pad & 0x08) {
+            if ((pad & 0x08) && !(last_pad & 0x08)) {
                 if (menu_selection > 0) menu_selection--;
                 render_main_menu();
-                for(time_left=0; time_left<15000; time_left++);
             }
-            if (pad & 0x04) {
-                if (menu_selection < 5) menu_selection++;
+            if ((pad & 0x04) && !(last_pad & 0x04)) {
+                if (menu_selection < 6) menu_selection++;
                 render_main_menu();
-                for(time_left=0; time_left<15000; time_left++);
             }
-            if (pad & 0x80) {
+            if ((pad & 0x80) && !(last_pad & 0x80)) {
                 if (menu_selection == 0) {
                     current_round = 1;
                     generate_maze_world();
                     render_game_screen();
                     game_state = STATE_PLAYING;
                 } else if (menu_selection == 1) {
-                    current_settings.difficulty = (current_settings.difficulty + 1) % 3;
+                    current_settings.custom_size = (current_settings.custom_size + 1) % 3;
                     save_settings();
                     render_main_menu();
-                    for(time_left=0; time_left<15000; time_left++);
                 } else if (menu_selection == 2) {
-                    current_settings.character_type = (current_settings.character_type + 1) % 2;
-                    save_settings();
-                    render_main_menu();
-                    for(time_left=0; time_left<15000; time_left++);
-                } else if (menu_selection == 3) {
                     current_settings.timer_mode = (current_settings.timer_mode + 1) % 2;
                     save_settings();
                     render_main_menu();
-                    for(time_left=0; time_left<15000; time_left++);
+                } else if (menu_selection == 3) {
+                    if (current_settings.timer_mode == 1) {
+                        current_settings.custom_time += 15;
+                        if (current_settings.custom_time > 180) current_settings.custom_time = 30;
+                        save_settings();
+                        render_main_menu();
+                    }
                 } else if (menu_selection == 4) {
+                    char_menu_selection = 0;
+                    render_char_menu();
+                    game_state = STATE_CHAR_MENU;
+                } else if (menu_selection == 5) {
                     current_settings.no_color_mode = !current_settings.no_color_mode;
                     save_settings();
                     render_main_menu();
-                    for(time_left=0; time_left<15000; time_left++);
-                } else if (menu_selection == 5) {
+                } else if (menu_selection == 6) {
                     current_settings.save_target = (current_settings.save_target + 1) % 2;
                     save_settings();
                     render_main_menu();
-                    for(time_left=0; time_left<15000; time_left++);
+                }
+            }
+        }
+        else if (game_state == STATE_CHAR_MENU) {
+            if ((pad & 0x08) && !(last_pad & 0x08)) {
+                if (char_menu_selection > 0) char_menu_selection--;
+                render_char_menu();
+            }
+            if ((pad & 0x04) && !(last_pad & 0x04)) {
+                if (char_menu_selection < 1) char_menu_selection++;
+                render_char_menu();
+            }
+            if ((pad & 0x80) && !(last_pad & 0x80)) {
+                if (char_menu_selection == 0) {
+                    current_settings.character_type = (current_settings.character_type + 1) % 2;
+                    save_settings();
+                    render_char_menu();
+                } else if (char_menu_selection == 1) {
+                    render_main_menu();
+                    game_state = STATE_MAIN_MENU;
                 }
             }
         }
@@ -324,25 +378,26 @@ void main(void) {
                             }
                         }
                     }
-                    for(frame_counter=0; frame_counter<4000; frame_counter++);
                 }
             }
             
-            if (pad & 0x10) {
+            if ((pad & 0x10) && !(last_pad & 0x10)) {
                 game_state = STATE_PAUSE;
                 gotoxy(12, 23);
                 cputs("PAUSED");
             }
         }
         else if (game_state == STATE_PAUSE) {
-            if (pad & 0x80) {
+            if ((pad & 0x80) && !(last_pad & 0x80)) {
                 render_game_screen();
                 game_state = STATE_PLAYING;
             }
-            if (pad & 0x40) {
+            if ((pad & 0x40) && !(last_pad & 0x40)) {
                 render_main_menu();
                 game_state = STATE_MAIN_MENU;
             }
         }
+        
+        last_pad = pad;
     }
 }
