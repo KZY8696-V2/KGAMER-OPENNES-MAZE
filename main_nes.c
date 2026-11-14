@@ -37,8 +37,6 @@ uint8_t menu_selection = 0;
 typedef struct {
     uint8_t difficulty;       // 0: Easy, 1: Medium, 2: Hard
     uint8_t character_type;   // 0: Lizard ('L'), 1: Snake ('S')
-    uint8_t maze_render_mode; // 0: GFX (Çizim), 1: TEXT (# / .)
-    uint8_t char_render_mode; // 0: GFX (Çizim), 1: TEXT (L / S)
     uint8_t timer_mode;       // 0: Timeless, 1: Timed
     uint8_t no_color_mode;    // 0: Color, 1: B&W
     uint8_t save_target;      // 0: SRAM, 1: In-Cartridge ROM / NVRAM
@@ -48,8 +46,6 @@ typedef struct {
 const GameSettings IN_CART_DEFAULTS = {
     1, // Medium Difficulty
     0, // Lizard
-    0, // GFX Maze
-    0, // GFX Character
     1, // Timed Mode
     0, // Color
     1  // In-Cartridge Storage
@@ -61,13 +57,6 @@ uint16_t time_left = 60;
 uint16_t max_time = 60;
 uint16_t frame_counter = 0;
 uint8_t current_round = 1;
-
-/* CHR VRAM Grafik İndeksleri */
-#define TILE_WALL       0x01
-#define TILE_PATH       0x02
-#define TILE_LIZARD_GFX 0x03
-#define TILE_SNAKE_GFX  0x04
-#define TILE_EXIT       0x05
 
 /* Labirent Boyutları */
 #define MAX_MAZE_W 31
@@ -140,6 +129,7 @@ void ppu_clear_screen(void) {
     }
 }
 
+/* Saf ASCII Karakter Dönüştürücü (Bozulmaları %100 Engeller) */
 void ppu_write_str(uint16_t addr, const char* str) {
     PPU_ADDR = (uint8_t)(addr >> 8);
     PPU_ADDR = (uint8_t)(addr & 0xFF);
@@ -149,6 +139,12 @@ void ppu_write_str(uint16_t addr, const char* str) {
             PPU_DATA = (uint8_t)(c - 0x37); 
         } else if (c >= '0' && c <= '9') {
             PPU_DATA = (uint8_t)(c - 0x10); 
+        } else if (c == '.') {
+            PPU_DATA = 0x2E; // Nokta karakteri
+        } else if (c == '#') {
+            PPU_DATA = 0x23; // Kare karakteri
+        } else if (c == 'X') {
+            PPU_DATA = 'X' - 0x37; // Çıkış harfi
         } else if (c == ' ') {
             PPU_DATA = 0x00; 
         } else {
@@ -313,17 +309,14 @@ void render_game_screen(void) {
             char cell = maze[r][c];
             
             if (r == p_y && c == p_x) {
-                if (current_settings.char_render_mode == 0) {
-                    ppu_put_tile(addr, (current_settings.character_type == 0) ? TILE_LIZARD_GFX : TILE_SNAKE_GFX);
-                } else {
-                    ppu_put_tile(addr, cell);
-                }
+                char player_sm = (current_settings.character_type == 0) ? 'L' : 'S';
+                ppu_put_tile(addr, player_sm - 0x37);
             } else if (r == e_y && c == e_x) {
-                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_EXIT : 0x18);
+                ppu_put_tile(addr, 'X' - 0x37);
             } else if (cell == '#') {
-                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_WALL : '#');
+                ppu_put_tile(addr, 0x23); // '#'
             } else {
-                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_PATH : '.');
+                ppu_put_tile(addr, 0x2E); // '.'
             }
         }
     }
@@ -355,18 +348,16 @@ void render_main_menu(void) {
     ppu_write_str(0x2088, "START GAME");
     ppu_write_str(0x20A8, "DIFFICULTY");
     ppu_write_str(0x20E8, "CHARACTER");
-    ppu_write_str(0x2128, "MAZE MODE");
-    ppu_write_str(0x2168, "CHAR MODE");
-    ppu_write_str(0x21A8, "COLOR MODE");
-    ppu_write_str(0x21E8, "SAVE TARGET");
+    ppu_write_str(0x2128, "TIMER MODE");
+    ppu_write_str(0x2168, "COLOR MODE");
+    ppu_write_str(0x21A8, "SAVE TARGET");
     ppu_write_str(0x2227, "DPAD NAV A SELECT");
     
     ppu_write_str(0x20A9, current_settings.difficulty == 0 ? "EASY" : (current_settings.difficulty == 1 ? "MED" : "HARD"));
     ppu_write_str(0x20E9, current_settings.character_type == 0 ? "LIZARD" : "SNAKE");
-    ppu_write_str(0x2129, current_settings.maze_render_mode == 0 ? "GFX" : "TEXT");
-    ppu_write_str(0x2169, current_settings.char_render_mode == 0 ? "GFX" : "TEXT");
-    ppu_write_str(0x21A9, current_settings.no_color_mode ? "BNW" : "COL");
-    ppu_write_str(0x21E9, current_settings.save_target == 0 ? "SRAM" : "INCART");
+    ppu_write_str(0x2129, current_settings.timer_mode == 0 ? "OFF" : "ON ");
+    ppu_write_str(0x2169, current_settings.no_color_mode ? "BNW" : "COL");
+    ppu_write_str(0x21A9, current_settings.save_target == 0 ? "SRAM" : "INCART");
     
     PPU_CTRL = 0x90;
     PPU_MASK = 0x1E;
@@ -390,7 +381,7 @@ void main(void) {
                 for(time_left=0; time_left<15000; time_left++);
             }
             if (pad & 0x04) {
-                if (menu_selection < 6) menu_selection++;
+                if (menu_selection < 5) menu_selection++;
                 render_main_menu();
                 for(time_left=0; time_left<15000; time_left++);
             }
@@ -411,21 +402,16 @@ void main(void) {
                     render_main_menu();
                     for(time_left=0; time_left<15000; time_left++);
                 } else if (menu_selection == 3) {
-                    current_settings.maze_render_mode = (current_settings.maze_render_mode + 1) % 2;
+                    current_settings.timer_mode = (current_settings.timer_mode + 1) % 2;
                     save_settings();
                     render_main_menu();
                     for(time_left=0; time_left<15000; time_left++);
                 } else if (menu_selection == 4) {
-                    current_settings.char_render_mode = (current_settings.char_render_mode + 1) % 2;
-                    save_settings();
-                    render_main_menu();
-                    for(time_left=0; time_left<15000; time_left++);
-                } else if (menu_selection == 5) {
                     current_settings.no_color_mode = !current_settings.no_color_mode;
                     save_settings();
                     render_main_menu();
                     for(time_left=0; time_left<15000; time_left++);
-                } else if (menu_selection == 6) {
+                } else if (menu_selection == 5) {
                     current_settings.save_target = (current_settings.save_target + 1) % 2;
                     save_settings();
                     render_main_menu();
@@ -463,20 +449,16 @@ void main(void) {
                     if (nx >= 0 && nx < maze_w && ny >= 0 && ny < maze_h) {
                         if (maze[ny][nx] != '#') {
                             uint16_t old_addr = start_addr + (p_y * 32) + p_x;
-                            ppu_put_tile(old_addr, (current_settings.maze_render_mode == 0) ? TILE_PATH : '.');
+                            ppu_put_tile(old_addr, 0x2E); // '.'
                             maze[p_y][p_x] = '.';
                             
                             p_x = nx; p_y = ny;
                             
                             {
                                 uint16_t new_addr = start_addr + (p_y * 32) + p_x;
-                                if (current_settings.char_render_mode == 0) {
-                                    ppu_put_tile(new_addr, (current_settings.character_type == 0) ? TILE_LIZARD_GFX : TILE_SNAKE_GFX);
-                                } else {
-                                    char player_sm = (current_settings.character_type == 0) ? 'L' : 'S';
-                                    ppu_put_tile(new_addr, player_sm - 0x37);
-                                }
-                                maze[p_y][p_x] = (current_settings.character_type == 0) ? 'L' : 'S';
+                                char player_sm = (current_settings.character_type == 0) ? 'L' : 'S';
+                                ppu_put_tile(new_addr, player_sm - 0x37);
+                                maze[p_y][p_x] = player_sm;
                             }
                             
                             if (p_x == e_x && p_y == e_y) {
