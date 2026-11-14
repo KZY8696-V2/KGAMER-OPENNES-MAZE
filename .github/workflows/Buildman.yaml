@@ -1,4 +1,4 @@
-name: Build KGAMER OpenNES Maze (Fast)
+name: Build KGAMER OpenNES Maze (Multi-Manager Fallback)
 
 on:
   push:
@@ -14,17 +14,53 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Download and Setup cc65 Prebuilt Snapshot
+      - name: Install cc65 with Fallback (Choco -> Winget -> Direct Download)
         shell: pwsh
         run: |
-          curl.exe -L -o cc65.zip "https://downloads.sourceforge.net/project/cc65/cc65-snapshot-win64.zip"
-          Expand-Archive -Path "cc65.zip" -DestinationPath "."
-          
-          # cc65 klasörünün içindeki bin dizininin tam yolunu buluyoruz
-          $cc65Bin = (Get-ChildItem -Directory -Filter "cc65*").FullName + "\bin"
-          
-          # GitHub PATH'ine UTF-8 formatında güvenle ekliyoruz (sorun burada çözülüyor)
-          Add-Content -Path $env:GITHUB_PATH -Value "$cc65Bin" -Encoding utf8
+          $installed = $false
+
+          # 1. Adım: Chocolatey ile kurmayı dene
+          try {
+            Write-Host "Chocolatey ile cc65 kurulmaya çalışılıyor..."
+            choco install cc65 -y --no-progress
+            if ($?) { $installed = $true }
+          } catch {
+            Write-Host "Chocolatey başarısız oldu, Winget'e geçiliyor..."
+          }
+
+          # 2. Adım: Eğer choco başarısız olduysa Winget ile dene
+          if (-not $installed) {
+            try {
+              Write-Host "Winget ile cc65 kurulmaya çalışılıyor..."
+              winget install --id cc65.cc65 -e --silent --accept-package-agreements --accept-source-agreements
+              if ($?) { $installed = $true }
+            } catch {
+              Write-Host "Winget de başarısız oldu, doğrudan indirme yöntemine geçiliyor..."
+            }
+          }
+
+          # 3. Adım: Paket yöneticileri başarısız olursa doğrudan SourceForge üzerinden ZIP indir
+          if (-not $installed) {
+            Write-Host "Paket yöneticileri kuramadı. Doğrudan ZIP indiriliyor..."
+            curl.exe -L -o cc65.zip "https://downloads.sourceforge.net/project/cc65/cc65-snapshot-win64.zip"
+            Expand-Archive -Path "cc65.zip" -DestinationPath "."
+          }
+
+          # cc65.exe yolunu sistemde veya çıkarılan klasörde bulup PATH'e ekle
+          $cc65Exe = Get-Command cc65 -ErrorAction SilentlyContinue
+          if ($cc65Exe) {
+              $cc65Bin = Split-Path $cc65Exe.Source
+          } else {
+              $cc65Bin = (Get-ChildItem -Path . -Recurse -Filter "cc65.exe" | Select-Object -First 1).DirectoryName
+          }
+
+          if ($cc65Bin) {
+              Write-Host "cc65 bulundu: $cc65Bin"
+              Add-Content -Path $env:GITHUB_PATH -Value "$cc65Bin" -Encoding utf8
+          } else {
+              Write-Error "Hiçbir yöntemle cc65 kurulamadı!"
+              exit 1
+          }
 
       - name: Verify cc65 Installation
         shell: pwsh
