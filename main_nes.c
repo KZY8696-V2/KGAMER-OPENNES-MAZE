@@ -129,11 +129,35 @@ void ppu_clear_screen(void) {
     }
 }
 
+/* DÜZELTİLDİ: Karakterlerin bozulmasını önleyen güvenli yazı basma fonksiyonu */
 void ppu_write_str(uint16_t addr, const char* str) {
     PPU_ADDR = (uint8_t)(addr >> 8);
     PPU_ADDR = (uint8_t)(addr & 0xFF);
     while (*str) {
-        PPU_DATA = *str - 0x20;
+        char c = *str;
+        if (c >= 'A' && c <= 'Z') {
+            PPU_DATA = c - 0x40; // Büyük harfler
+        } else if (c >= '0' && c <= '9') {
+            PPU_DATA = c - 0x10; // Rakamlar
+        } else if (c == ' ') {
+            PPU_DATA = 0x00;     // Boşluk
+        } else if (c == '=') {
+            PPU_DATA = 0x3D;
+        } else if (c == ':') {
+            PPU_DATA = 0x3A;
+        } else if (c == '>') {
+            PPU_DATA = 0x3E;
+        } else if (c == '-') {
+            PPU_DATA = 0x2D;
+        } else if (c == '[') {
+            PPU_DATA = 0x5B;
+        } else if (c == ']') {
+            PPU_DATA = 0x5D;
+        } else if (c == '/') {
+            PPU_DATA = 0x2F;
+        } else {
+            PPU_DATA = c - 0x20; 
+        }
         str++;
     }
 }
@@ -279,14 +303,14 @@ void render_game_screen(void) {
                 if (current_settings.char_render_mode == 0) {
                     ppu_put_tile(addr, (current_settings.character_type == 0) ? TILE_LIZARD_GFX : TILE_SNAKE_GFX);
                 } else {
-                    ppu_put_tile(addr, cell - 0x20);
+                    ppu_put_tile(addr, cell);
                 }
             } else if (r == e_y && c == e_x) {
-                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_EXIT : ('O' - 0x20));
+                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_EXIT : 'O');
             } else if (cell == '#') {
-                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_WALL : ('#' - 0x20));
+                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_WALL : '#');
             } else {
-                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_PATH : ('.' - 0x20));
+                ppu_put_tile(addr, (current_settings.maze_render_mode == 0) ? TILE_PATH : '.');
             }
         }
     }
@@ -404,7 +428,7 @@ void main(void) {
                     if (nx >= 0 && nx < maze_w && ny >= 0 && ny < maze_h) {
                         if (maze[ny][nx] != '#') {
                             uint16_t old_addr = start_addr + (p_y * 32) + p_x;
-                            ppu_put_tile(old_addr, (current_settings.maze_render_mode == 0) ? TILE_PATH : ('.' - 0x20));
+                            ppu_put_tile(old_addr, (current_settings.maze_render_mode == 0) ? TILE_PATH : '.');
                             maze[p_y][p_x] = '.';
                             
                             p_x = nx; p_y = ny;
@@ -415,7 +439,7 @@ void main(void) {
                                     ppu_put_tile(new_addr, (current_settings.character_type == 0) ? TILE_LIZARD_GFX : TILE_SNAKE_GFX);
                                 } else {
                                     char player_sym = (current_settings.character_type == 0) ? 'L' : 'S';
-                                    ppu_put_tile(new_addr, player_sym - 0x20);
+                                    ppu_put_tile(new_addr, player_sym);
                                 }
                                 maze[p_y][p_x] = (current_settings.character_type == 0) ? 'L' : 'S';
                             }
